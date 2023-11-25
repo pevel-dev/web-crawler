@@ -1,0 +1,9 @@
+[tool.ruff]
+line-length = 120
+extend-exclude = ['venv']
+select = ["ALL"]
+ignore = ["D", "INP", "ANN", "FA", "FBT", "S301", "PLR0913"]
+
+
+[tool.ruff.format]
+quote-style = "double"
