@@ -15,6 +15,8 @@ arg_parse.add_argument('-c', '--retry_count', type=int, default=1, help='Max ret
 arg_parse.add_argument('-r', '--follow_redirect', type=bool, default=True, help='Allow redirects')
 arg_parse.add_argument('-th', '--threads', type=int, default=10, help='Max count threads')
 arg_parse.add_argument('-s', '--from_save', type=bool, default=True)
+arg_parse.add_argument('-fo', "--filter_only", type=str, default='', nargs='*')
+arg_parse.add_argument('-fe', "--filter_exclude", type=str, default='', nargs='*')
 
 
 def main(args):
@@ -23,7 +25,10 @@ def main(args):
     need_visit_cache.load()
     visited_cache.load()
     file_saver = FileSave('save')
-    url_filters = [lambda x: 'wikipedia.org' in x.netloc]
+    url_filters = []
+    if args.filter_only:
+        url_filters.append(lambda url: url in args.filter_only)
+    url_filters.append(lambda url: url not in args.filter_exclude)
     crawler = Crawler(
         args.url,
         url_filters,
