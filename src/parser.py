@@ -21,7 +21,7 @@ class Parser:
                 )
                 if request.status_code == httpx.codes.OK:
                     return request.url, request.text
-            except:
+            except Exception as ex:
                 pass
             retry_count += 1
             if retry_count > retry_max_count:

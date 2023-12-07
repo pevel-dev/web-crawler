@@ -4,6 +4,7 @@ import urllib.parse
 from threading import Lock, Thread
 
 from src.cache import Cache
+from src.file_save import FileSave
 from src.link_parser import LinkParser
 from src.parser import Parser
 
@@ -15,6 +16,10 @@ class Crawler:
             url_filter_predicates: list,
             need_visit_cache: Cache,
             visited_cache: Cache,
+            file_save: FileSave,
+            timeout: int,
+            retry_count: int,
+            follow_redirects: bool,
             max_threads: int = 5000,
     ):
         self._start_url = start_url
@@ -25,8 +30,16 @@ class Crawler:
         self._visited = visited_cache.cache
         self._max_threads = max_threads
         self._lock = Lock()
+        self._file_save_service = file_save
+        self._timeout = timeout
+        self._retry_count = retry_count
+        self._follow_redirects = follow_redirects
+
+        self.SAVE_TASKS_COUNT = 5000
 
     def start(self):
+        # self.check_robots(self._start_url)
+        count = 0
         self._need_visit.add(self._start_url)
         while len(self._need_visit) > 0 or threading.active_count() > 1:
             if threading.active_count() > self._max_threads or len(self._need_visit) == 0:  # wait end started tasks
@@ -39,6 +52,13 @@ class Crawler:
 
             new_task = Thread(target=self.crawler_task, args=(current_link,))
             new_task.start()
+            if count % self.SAVE_TASKS_COUNT == 0:
+                self._lock.acquire()
+
+                self._visited_cache.save()
+                self._need_visit_cache.save()
+
+                self._lock.release()
 
     def update_links(self, base_url: str, new_links: list[str]) -> None:
         for link in new_links:
@@ -63,8 +83,25 @@ class Crawler:
         self._lock.release()
 
     def crawler_task(self, current_url: str) -> None:
-        url, body = Parser.download_url(current_url)
+        url, body = Parser.download_url(url=current_url, timeout=self._timeout, retry_max_count=self._retry_count, follow_redirects=self._follow_redirects)
         if Parser.is_html(body):
             links = LinkParser()
             links.feed(body)
             self.update_links(url, links.links)
+            self._file_save_service.html_save(str(url), body)
+
+    def check_robots(self, url):
+        not_in_url = []
+        _, body = Parser.download_url(url + 'robots.txt', follow_redirects=True)
+        all_user_agent = False
+        for i in body.split('\n'):
+            splited = i.split(':')
+            if len(splited) == 2:
+                option, value = splited
+                if option.lower() == 'user-agent':
+                    all_user_agent = value.strip() == '*'
+                if option.lower() == 'disallow' and all_user_agent:
+                    not_in_url.append((url + value.strip()).replace('//', '/'))
+        self._url_filter_predicates.append(
+            lambda url: url not in not_in_url
+        )
